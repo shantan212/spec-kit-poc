@@ -1,0 +1,13 @@
+extends:
+  - recommended
+
+rules:
+  info-contact: off
+  info-license: off
+  operation-operationId: warn
+  operation-description: warn
+  tag-description: off
+  no-unused-components: error
+  no-ambiguous-paths: error
+  path-declaration-must-exist: error
+  spec-components-invalid-map-name: error

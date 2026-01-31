@@ -1,0 +1,3 @@
+com\specit\productlist\api\OpenApiContractTest.class
+com\specit\productlist\testsupport\PostgresTestBase.class
+com\specit\productlist\api\ProductsApiIT.class

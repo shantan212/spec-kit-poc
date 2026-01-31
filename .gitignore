@@ -1,0 +1,25 @@
+# Java
+/target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+.gradle/
+/build/
+
+# Node
+/node_modules/
+/dist/
+/build/
+*.log
+
+# Env / secrets
+.env
+.env.*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
