@@ -120,13 +120,10 @@ jobs:
         working-directory: frontend
         run: npm install
 
-      - name: Install openapi-typescript
-        run: npm install -g openapi-typescript
-
       - name: Generate TypeScript types from OpenAPI
         run: |
           echo "🔍 Generating TypeScript types from OpenAPI contract..."
-          openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated-types.ts
+          npx openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated-types.ts
           echo "✅ Types generated successfully"
 
       - name: TypeScript type check

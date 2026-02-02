@@ -121,20 +121,16 @@ jobs:
         working-directory: frontend
         run: npm install
 
-      - name: Install code generation tools (global)
-        run: |
-          npm install -g openapi-typescript openapi-typescript-codegen
-
       - name: Generate TypeScript types
         run: |
           echo "🔧 Generating TypeScript types from OpenAPI contract..."
-          openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated/api-types.ts
+          npx openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated/api-types.ts
           echo "✅ TypeScript types generated"
 
       - name: Generate TypeScript API client
         run: |
           echo "🔧 Generating TypeScript API client..."
-          openapi-typescript-codegen \
+          npx openapi-typescript-codegen \
             --input ${{ env.OPENAPI_SPEC }} \
             --output frontend/src/services/generated \
             --client fetch \
@@ -178,15 +174,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install code generation tools
-        run: |
-          npm install -g @openapitools/openapi-generator-cli openapi-typescript openapi-typescript-codegen
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
 
       - name: Generate all code
         run: |
           # Backend
           mkdir -p backend/src/main/java/com/specit/productlist/api/generated/model
-          openapi-generator-cli generate \
+          npx @openapitools/openapi-generator-cli generate \
             -i ${{ env.OPENAPI_SPEC }} \
             -g spring \
             -o backend/generated \
@@ -207,8 +203,8 @@ jobs:
           
           # Frontend
           mkdir -p frontend/src/services/generated
-          openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated/api-types.ts
-          openapi-typescript-codegen \
+          npx openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated/api-types.ts
+          npx openapi-typescript-codegen \
             --input ${{ env.OPENAPI_SPEC }} \
             --output frontend/src/services/generated \
             --client fetch \
