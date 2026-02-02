@@ -3,6 +3,17 @@ info:
   title: Product Listing API
   version: 1.0.0
   description: API for listing available products with search, filtering, sorting, and pagination.
+  contact:
+    name: API Support
+    email: api-support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+tags:
+  - name: Products
+    description: Product listing operations
+  - name: Categories
+    description: Category operations
 servers:
   - url: http://localhost:8080
 security:
@@ -10,6 +21,9 @@ security:
 paths:
   /api/v1/products:
     get:
+      operationId: listProducts
+      tags:
+        - Products
       summary: List available products
       description: Returns products that are currently available. Supports search, category filter, sorting, and pagination.
       parameters:
@@ -72,6 +86,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
   /api/v1/categories:
     get:
+      operationId: listCategories
+      tags:
+        - Categories
       summary: List categories
       description: Returns categories usable for filtering.
       responses:
