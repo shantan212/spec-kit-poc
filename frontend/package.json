@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "codegen": "openapi-typescript ../specs/001-product-list/contracts/openapi.yaml -o src/services/generated/api-types.ts",
+    "codegen:client": "openapi-typescript-codegen --input ../specs/001-product-list/contracts/openapi.yaml --output src/services/generated --client fetch --useOptions --useUnionTypes",
+    "codegen:all": "npm run codegen && npm run codegen:client"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -20,6 +23,8 @@
     "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
     "jsdom": "^24.1.3",
+    "openapi-typescript": "^6.7.4",
+    "openapi-typescript-codegen": "^0.27.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.12",
     "vitest": "^1.2.2"

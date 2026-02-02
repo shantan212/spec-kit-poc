@@ -23,3 +23,10 @@
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated code (SpecIT)
+# Keep .gitkeep but ignore generated files
+backend/generated/
+backend/target/generated-sources/
+frontend/src/services/generated/*
+!frontend/src/services/generated/.gitkeep

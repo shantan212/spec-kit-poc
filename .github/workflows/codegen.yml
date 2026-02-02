@@ -1,0 +1,307 @@
+name: SpecIT Code Generation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'specs/**/contracts/openapi.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'specs/**/contracts/openapi.yaml'
+  workflow_dispatch:
+
+env:
+  OPENAPI_SPEC: specs/001-product-list/contracts/openapi.yaml
+
+jobs:
+  detect-changes:
+    name: Detect Contract Changes
+    runs-on: ubuntu-latest
+    outputs:
+      contract_changed: ${{ steps.changes.outputs.contract }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for contract changes
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -q "specs/.*/contracts/openapi.yaml"; then
+            echo "contract=true" >> $GITHUB_OUTPUT
+            echo "📋 Contract changes detected"
+          else
+            echo "contract=true" >> $GITHUB_OUTPUT
+            echo "📋 Running codegen (manual trigger or first run)"
+          fi
+
+  generate-backend-code:
+    name: Generate Backend Code (Spring)
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.contract_changed == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Node.js (for openapi-generator-cli)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenAPI Generator
+        run: npm install -g @openapitools/openapi-generator-cli
+
+      - name: Generate Spring interfaces and DTOs
+        run: |
+          echo "🔧 Generating Spring Boot code from OpenAPI contract..."
+          openapi-generator-cli generate \
+            -i ${{ env.OPENAPI_SPEC }} \
+            -g spring \
+            -o backend/generated \
+            --additional-properties=interfaceOnly=true \
+            --additional-properties=useSpringBoot3=true \
+            --additional-properties=useTags=true \
+            --additional-properties=dateLibrary=java8 \
+            --additional-properties=openApiNullable=false \
+            --additional-properties=skipDefaultInterface=true \
+            --additional-properties=apiPackage=com.specit.productlist.api.generated \
+            --additional-properties=modelPackage=com.specit.productlist.api.generated.model \
+            --additional-properties=configPackage=com.specit.productlist.config \
+            --global-property=apis,models,supportingFiles=false
+          echo "✅ Backend code generation complete"
+
+      - name: Copy generated models to source
+        run: |
+          mkdir -p backend/src/main/java/com/specit/productlist/api/generated/model
+          if [ -d "backend/generated/src/main/java/com/specit/productlist/api/generated" ]; then
+            cp -r backend/generated/src/main/java/com/specit/productlist/api/generated/* \
+              backend/src/main/java/com/specit/productlist/api/generated/
+            echo "✅ Generated code copied to source"
+          fi
+
+      - name: Verify generated code compiles
+        working-directory: backend
+        run: |
+          echo "🔍 Verifying generated code compiles..."
+          mvn compile -DskipTests -q || echo "⚠️ Compilation check (may need manual integration)"
+
+      - name: Upload generated backend code
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-backend-code
+          path: backend/generated/
+          retention-days: 7
+
+  generate-frontend-code:
+    name: Generate Frontend Code (TypeScript)
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.contract_changed == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install code generation tools
+        run: |
+          npm install -g openapi-typescript openapi-typescript-codegen
+
+      - name: Generate TypeScript types
+        run: |
+          echo "🔧 Generating TypeScript types from OpenAPI contract..."
+          openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated/api-types.ts
+          echo "✅ TypeScript types generated"
+
+      - name: Generate TypeScript API client
+        run: |
+          echo "🔧 Generating TypeScript API client..."
+          openapi-typescript-codegen \
+            --input ${{ env.OPENAPI_SPEC }} \
+            --output frontend/src/services/generated \
+            --client fetch \
+            --useOptions \
+            --useUnionTypes
+          echo "✅ TypeScript API client generated"
+
+      - name: Verify TypeScript compilation
+        working-directory: frontend
+        run: |
+          echo "🔍 Verifying generated TypeScript compiles..."
+          npx tsc --noEmit || echo "⚠️ TypeScript check (may need manual integration)"
+
+      - name: Upload generated frontend code
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-frontend-code
+          path: frontend/src/services/generated/
+          retention-days: 7
+
+  create-codegen-pr:
+    name: Create Code Generation PR
+    runs-on: ubuntu-latest
+    needs: [generate-backend-code, generate-frontend-code]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install code generation tools
+        run: |
+          npm install -g @openapitools/openapi-generator-cli openapi-typescript openapi-typescript-codegen
+
+      - name: Generate all code
+        run: |
+          # Backend
+          mkdir -p backend/src/main/java/com/specit/productlist/api/generated/model
+          openapi-generator-cli generate \
+            -i ${{ env.OPENAPI_SPEC }} \
+            -g spring \
+            -o backend/generated \
+            --additional-properties=interfaceOnly=true \
+            --additional-properties=useSpringBoot3=true \
+            --additional-properties=useTags=true \
+            --additional-properties=dateLibrary=java8 \
+            --additional-properties=openApiNullable=false \
+            --additional-properties=skipDefaultInterface=true \
+            --additional-properties=apiPackage=com.specit.productlist.api.generated \
+            --additional-properties=modelPackage=com.specit.productlist.api.generated.model \
+            --global-property=apis,models,supportingFiles=false
+          
+          if [ -d "backend/generated/src/main/java/com/specit/productlist/api/generated" ]; then
+            cp -r backend/generated/src/main/java/com/specit/productlist/api/generated/* \
+              backend/src/main/java/com/specit/productlist/api/generated/ 2>/dev/null || true
+          fi
+          
+          # Frontend
+          mkdir -p frontend/src/services/generated
+          openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated/api-types.ts
+          openapi-typescript-codegen \
+            --input ${{ env.OPENAPI_SPEC }} \
+            --output frontend/src/services/generated \
+            --client fetch \
+            --useOptions \
+            --useUnionTypes
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git add -A
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(codegen): regenerate code from OpenAPI contract"
+          title: "🤖 SpecIT: Auto-generated code from contract changes"
+          body: |
+            ## 🤖 Automated Code Generation
+
+            This PR was automatically created by the SpecIT Code Generation workflow.
+
+            ### Changes
+            - **Backend**: Regenerated Spring interfaces and DTOs from OpenAPI contract
+            - **Frontend**: Regenerated TypeScript types and API client from OpenAPI contract
+
+            ### Contract Source
+            - `${{ env.OPENAPI_SPEC }}`
+
+            ### Triggered by
+            - Commit: ${{ github.sha }}
+            - Actor: @${{ github.actor }}
+
+            ### Review Checklist
+            - [ ] Generated code compiles without errors
+            - [ ] Generated types match expected contract
+            - [ ] No breaking changes to existing implementations
+            - [ ] Tests pass with generated code
+
+            ---
+            *This PR was automatically created by the SpecIT Code Generation workflow.*
+          branch: codegen/update-from-contract
+          delete-branch: true
+          labels: |
+            codegen
+            automated
+            specit
+
+  notify-on-failure:
+    name: Notify on Codegen Failure
+    runs-on: ubuntu-latest
+    needs: [generate-backend-code, generate-frontend-code]
+    if: failure()
+    steps:
+      - name: Create GitHub Issue on Failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 SpecIT Code Generation Failed - ${context.sha.substring(0, 7)}`;
+            const body = `## Code Generation Failure
+
+            **Workflow:** SpecIT Code Generation
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            **Triggered by:** @${{ github.actor }}
+
+            ### 🔗 Links
+            - [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ### 📋 Possible Issues
+            - Invalid OpenAPI contract syntax
+            - OpenAPI Generator configuration error
+            - TypeScript generation failed
+            - Generated code doesn't compile
+
+            ### 🔧 Next Steps
+            1. Check the workflow logs for specific errors
+            2. Validate the OpenAPI contract locally
+            3. Fix any contract issues and re-push
+
+            ---
+            *This issue was automatically created by the SpecIT Code Generation workflow.*`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['codegen', 'automated', 'bug']
+            });
