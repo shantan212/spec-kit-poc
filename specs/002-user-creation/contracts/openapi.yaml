@@ -1,0 +1,226 @@
+openapi: 3.0.3
+info:
+  title: User Management API
+  version: 1.0.0
+  description: API for user account creation and management.
+  contact:
+    name: API Support
+    email: api-support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+tags:
+  - name: Users
+    description: User management operations
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/users:
+    post:
+      operationId: createUser
+      tags:
+        - Users
+      summary: Create a new user account
+      description: |
+        Creates a new user account with the provided email, password, and name.
+        The password is securely hashed before storage.
+        Returns the created user's details (excluding password).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            examples:
+              validUser:
+                summary: Valid user creation request
+                value:
+                  email: "john.doe@example.com"
+                  name: "John Doe"
+                  password: "SecurePass123"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              examples:
+                createdUser:
+                  summary: Successfully created user
+                  value:
+                    id: "550e8400-e29b-41d4-a716-446655440000"
+                    email: "john.doe@example.com"
+                    name: "John Doe"
+                    status: "ACTIVE"
+                    createdAt: "2026-02-02T12:00:00Z"
+        '400':
+          description: Invalid request - validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidEmail:
+                  summary: Invalid email format
+                  value:
+                    error:
+                      code: "VALIDATION_ERROR"
+                      message: "Invalid request parameters"
+                      correlationId: "abc-123-def"
+                      details:
+                        - field: "email"
+                          message: "Invalid email format"
+                weakPassword:
+                  summary: Password doesn't meet requirements
+                  value:
+                    error:
+                      code: "VALIDATION_ERROR"
+                      message: "Invalid request parameters"
+                      correlationId: "abc-123-def"
+                      details:
+                        - field: "password"
+                          message: "Password must contain at least one uppercase letter"
+                        - field: "password"
+                          message: "Password must contain at least one digit"
+        '409':
+          description: Conflict - email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emailExists:
+                  summary: Email already registered
+                  value:
+                    error:
+                      code: "EMAIL_ALREADY_EXISTS"
+                      message: "A user with this email address already exists"
+                      correlationId: "abc-123-def"
+        '500':
+          description: Unexpected server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - name
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: User's email address (must be unique)
+          example: "john.doe@example.com"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: User's display name
+          example: "John Doe"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          description: |
+            User's password. Must meet complexity requirements:
+            - Minimum 8 characters
+            - At least one uppercase letter
+            - At least one lowercase letter
+            - At least one digit
+          example: "SecurePass123"
+    UserResponse:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the user
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "john.doe@example.com"
+        name:
+          type: string
+          description: User's display name
+          example: "John Doe"
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+            - PENDING
+          description: Current account status
+          example: "ACTIVE"
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the user was created
+          example: "2026-02-02T12:00:00Z"
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Invalid request parameters"
+            correlationId:
+              type: string
+              nullable: true
+              description: Correlation ID for tracing
+              example: "abc-123-def"
+            details:
+              type: array
+              nullable: true
+              description: Detailed validation errors (for 400 responses)
+              items:
+                $ref: '#/components/schemas/ValidationError'
+    ValidationError:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          description: Field that failed validation
+          example: "email"
+        message:
+          type: string
+          description: Validation error message
+          example: "Invalid email format"
