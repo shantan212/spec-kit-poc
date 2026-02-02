@@ -1,0 +1,34 @@
+extends:
+  - spectral:oas
+
+rules:
+  # Ensure all operations have operationId
+  operation-operationId: error
+  
+  # Ensure all operations have descriptions
+  operation-description: warn
+  
+  # Ensure all operations have tags
+  operation-tag-defined: error
+  
+  # Ensure request bodies have examples
+  oas3-valid-media-example: warn
+  
+  # Ensure responses have descriptions
+  oas3-api-servers: warn
+  
+  # Custom rules for SpecIT compliance
+  info-contact: warn
+  info-description: error
+  info-license: warn
+  
+  # Schema validation
+  oas3-schema: error
+  oas3-unused-component: warn
+  
+  # Path validation
+  path-params: error
+  path-declarations-must-exist: error
+  
+  # Security
+  oas3-operation-security-defined: warn

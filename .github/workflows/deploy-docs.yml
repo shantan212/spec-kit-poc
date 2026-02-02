@@ -276,3 +276,48 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  notify-on-failure:
+    name: Notify on Deploy Failure
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    if: failure()
+    steps:
+      - name: Create GitHub Issue on Failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 API Docs Deployment Failed - ${context.sha.substring(0, 7)}`;
+            const body = `## Documentation Deployment Failure
+
+            **Workflow:** Deploy API Documentation
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            **Triggered by:** @${{ github.actor }}
+
+            ### 🔗 Links
+            - [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+
+            ### 📋 Possible Issues
+            - GitHub Pages not enabled or misconfigured
+            - OpenAPI spec file missing or invalid
+            - Build step failed
+            - Deployment permissions issue
+
+            ### 🔧 Next Steps
+            1. Check the workflow logs for specific errors
+            2. Verify GitHub Pages is enabled in repository settings
+            3. Ensure OpenAPI spec exists at \`specs/001-product-list/contracts/openapi.yaml\`
+            4. Re-run the deployment
+
+            ---
+            *This issue was automatically created by the Deploy API Documentation workflow.*`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['deployment', 'automated', 'bug']
+            });

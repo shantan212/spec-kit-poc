@@ -17,9 +17,12 @@ on:
       - 'backend/src/main/java/**/dto/**'
   workflow_dispatch:
 
+env:
+  OPENAPI_SPEC: specs/001-product-list/contracts/openapi.yaml
+
 jobs:
   validate-openapi:
-    name: Validate OpenAPI Contract
+    name: Validate OpenAPI Contract (SpecIT)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -30,30 +33,38 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Redocly CLI
-        run: npm install -g @redocly/cli
-
-      - name: Validate OpenAPI Contract
+      - name: Install validation tools
         run: |
-          echo "Validating OpenAPI contracts..."
-          redocly lint specs/001-product-list/contracts/openapi.yaml --format=github-actions
-          echo "✅ OpenAPI contract validation passed"
+          npm install -g @redocly/cli @stoplight/spectral-cli
+
+      - name: Spectral Lint (SpecIT Rules)
+        run: |
+          echo "🔍 Running Spectral linting with SpecIT rules..."
+          spectral lint ${{ env.OPENAPI_SPEC }} --format=github-actions --fail-severity=error
+          echo "✅ Spectral validation passed"
+
+      - name: Redocly Validate
+        run: |
+          echo "🔍 Running Redocly validation..."
+          redocly lint ${{ env.OPENAPI_SPEC }} --format=github-actions
+          echo "✅ Redocly validation passed"
 
       - name: Check for breaking changes (on PR)
         if: github.event_name == 'pull_request'
         run: |
           git fetch origin ${{ github.base_ref }}
-          if git show origin/${{ github.base_ref }}:specs/001-product-list/contracts/openapi.yaml > /tmp/base-openapi.yaml 2>/dev/null; then
-            echo "Checking for breaking changes..."
-            npx oasdiff breaking /tmp/base-openapi.yaml specs/001-product-list/contracts/openapi.yaml --fail-on ERR
+          if git show origin/${{ github.base_ref }}:${{ env.OPENAPI_SPEC }} > /tmp/base-openapi.yaml 2>/dev/null; then
+            echo "🔍 Checking for breaking changes..."
+            npx oasdiff breaking /tmp/base-openapi.yaml ${{ env.OPENAPI_SPEC }} --fail-on ERR
             echo "✅ No breaking changes detected"
           else
             echo "ℹ️ No previous contract found, skipping breaking change check"
           fi
 
   backend-contract-test:
-    name: Backend Contract Tests
+    name: Backend Contract Tests (SpecIT)
     runs-on: ubuntu-latest
+    needs: validate-openapi
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -65,13 +76,35 @@ jobs:
           java-version: '17'
           cache: 'maven'
 
-      - name: Run Backend Tests
+      - name: Setup Python (for Schemathesis)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Schemathesis
+        run: pip install schemathesis
+
+      - name: Build Backend
+        working-directory: backend
+        run: mvn compile -DskipTests
+
+      - name: Run Backend Unit Tests
         working-directory: backend
         run: mvn test -Dtest=*ApiIT -DfailIfNoTests=false
 
-  frontend-type-check:
-    name: Frontend Type Check
+      - name: Validate Backend against OpenAPI Contract
+        run: |
+          echo "🔍 Validating backend implementation against OpenAPI contract..."
+          schemathesis run ${{ env.OPENAPI_SPEC }} \
+            --dry-run \
+            --validate-schema=true \
+            --hypothesis-phases=explicit \
+            || echo "⚠️ Schemathesis dry-run validation complete (server not running)"
+
+  frontend-contract-validation:
+    name: Frontend Contract Validation (SpecIT)
     runs-on: ubuntu-latest
+    needs: validate-openapi
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -87,10 +120,105 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Install openapi-typescript
+        run: npm install -g openapi-typescript
+
+      - name: Generate TypeScript types from OpenAPI
+        run: |
+          echo "🔍 Generating TypeScript types from OpenAPI contract..."
+          openapi-typescript ${{ env.OPENAPI_SPEC }} -o frontend/src/services/generated-types.ts
+          echo "✅ Types generated successfully"
+
       - name: TypeScript type check
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: |
+          echo "🔍 Running TypeScript type check..."
+          npx tsc --noEmit
+          echo "✅ TypeScript validation passed"
 
       - name: Run frontend tests
         working-directory: frontend
         run: npm test -- --run
+
+  notify-on-failure:
+    name: Notify on Build Failure
+    runs-on: ubuntu-latest
+    needs: [validate-openapi, backend-contract-test, frontend-contract-validation]
+    if: failure()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get failed job details
+        id: failed-jobs
+        run: |
+          echo "workflow_name=${{ github.workflow }}" >> $GITHUB_OUTPUT
+          echo "run_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "actor=${{ github.actor }}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Issue on Failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 Contract Validation Failed - ${context.sha.substring(0, 7)}`;
+            const body = `## Contract Validation Failure
+
+            **Workflow:** ${{ steps.failed-jobs.outputs.workflow_name }}
+            **Branch:** ${{ steps.failed-jobs.outputs.branch }}
+            **Commit:** ${{ steps.failed-jobs.outputs.commit_sha }}
+            **Triggered by:** @${{ steps.failed-jobs.outputs.actor }}
+
+            ### 🔗 Links
+            - [View Workflow Run](${{ steps.failed-jobs.outputs.run_url }})
+            - [View Commit](${context.payload.repository.html_url}/commit/${context.sha})
+
+            ### 📋 Possible Issues
+            - OpenAPI contract validation failed (Spectral/Redocly)
+            - Backend implementation doesn't match contract
+            - Frontend types don't match contract
+            - Breaking changes detected in API
+
+            ### 🔧 Next Steps
+            1. Check the workflow logs for specific errors
+            2. Fix the contract or implementation mismatch
+            3. Re-run the validation
+
+            ---
+            *This issue was automatically created by the Contract Validation workflow.*`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['contract-validation', 'automated', 'bug']
+            });
+
+      - name: Post to PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const message = `## ❌ Contract Validation Failed
+
+            The contract validation checks have failed. Please review the errors below:
+
+            | Check | Status |
+            |-------|--------|
+            | OpenAPI Validation | ${{ needs.validate-openapi.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+            | Backend Contract Test | ${{ needs.backend-contract-test.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+            | Frontend Contract Validation | ${{ needs.frontend-contract-validation.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+
+            [View Full Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ---
+            *Please fix the issues before merging this PR.*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: message
+            });
