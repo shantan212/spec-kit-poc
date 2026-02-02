@@ -1,0 +1,276 @@
+name: Deploy API Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'specs/**/contracts/openapi.yaml'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Create docs directory
+        run: mkdir -p docs
+
+      - name: Copy OpenAPI spec to docs
+        run: |
+          cp specs/001-product-list/contracts/openapi.yaml docs/openapi.yaml
+
+      - name: Generate Landing Page
+        run: |
+          cat > docs/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Product Listing API - Documentation</title>
+              <style>
+                  * { margin: 0; padding: 0; box-sizing: border-box; }
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      min-height: 100vh;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                  }
+                  .container { text-align: center; padding: 2rem; }
+                  h1 {
+                      color: white;
+                      font-size: 2.5rem;
+                      margin-bottom: 1rem;
+                      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                  }
+                  p { color: rgba(255,255,255,0.9); font-size: 1.1rem; margin-bottom: 2rem; }
+                  .cards { display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center; }
+                  .card {
+                      background: white;
+                      border-radius: 16px;
+                      padding: 2rem;
+                      width: 300px;
+                      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                      transition: transform 0.3s ease, box-shadow 0.3s ease;
+                      text-decoration: none;
+                      color: inherit;
+                  }
+                  .card:hover {
+                      transform: translateY(-8px);
+                      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                  }
+                  .card-icon { font-size: 3rem; margin-bottom: 1rem; }
+                  .card h2 { color: #333; font-size: 1.5rem; margin-bottom: 0.5rem; }
+                  .card p { color: #666; font-size: 0.95rem; margin-bottom: 1rem; }
+                  .card-tag {
+                      display: inline-block;
+                      padding: 0.25rem 0.75rem;
+                      border-radius: 20px;
+                      font-size: 0.8rem;
+                      font-weight: 600;
+                  }
+                  .swagger .card-tag { background: #49cc90; color: white; }
+                  .redoc .card-tag { background: #e53935; color: white; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>📦 Product Listing API</h1>
+                  <p>Choose your preferred documentation format</p>
+                  <div class="cards">
+                      <a href="swagger.html" class="card swagger">
+                          <div class="card-icon">🔧</div>
+                          <h2>Swagger UI</h2>
+                          <p>Interactive API explorer with try-it-out functionality</p>
+                          <span class="card-tag">Interactive</span>
+                      </a>
+                      <a href="redoc.html" class="card redoc">
+                          <div class="card-icon">📖</div>
+                          <h2>ReDoc</h2>
+                          <p>Clean, professional documentation for external sharing</p>
+                          <span class="card-tag">Professional</span>
+                      </a>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Generate Swagger UI Page
+        run: |
+          cat > docs/swagger.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Product Listing API - Swagger UI</title>
+              <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+              <style>
+                  html { box-sizing: border-box; overflow-y: scroll; }
+                  *, *:before, *:after { box-sizing: inherit; }
+                  body { margin: 0; background: #fafafa; }
+                  .swagger-ui .topbar { display: none; }
+                  .custom-header {
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      padding: 1rem 2rem;
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                  }
+                  .custom-header h1 {
+                      color: white;
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      font-size: 1.5rem;
+                      margin: 0;
+                  }
+                  .custom-header a {
+                      color: rgba(255,255,255,0.9);
+                      text-decoration: none;
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      font-size: 0.9rem;
+                      padding: 0.5rem 1rem;
+                      border: 1px solid rgba(255,255,255,0.5);
+                      border-radius: 4px;
+                      transition: all 0.2s;
+                  }
+                  .custom-header a:hover {
+                      background: rgba(255,255,255,0.1);
+                      border-color: white;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="custom-header">
+                  <h1>📦 Product Listing API</h1>
+                  <a href="index.html">← Back to Docs Home</a>
+              </div>
+              <div id="swagger-ui"></div>
+              <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+              <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+              <script>
+                  window.onload = function() {
+                      window.ui = SwaggerUIBundle({
+                          url: "openapi.yaml",
+                          dom_id: '#swagger-ui',
+                          deepLinking: true,
+                          presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+                          plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+                          layout: "StandaloneLayout",
+                          defaultModelsExpandDepth: 2,
+                          defaultModelExpandDepth: 2,
+                          docExpansion: "list",
+                          filter: true,
+                          showExtensions: true,
+                          showCommonExtensions: true
+                      });
+                  };
+              </script>
+          </body>
+          </html>
+          EOF
+
+      - name: Generate ReDoc Page
+        run: |
+          cat > docs/redoc.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Product Listing API - ReDoc</title>
+              <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+              <style>
+                  body { margin: 0; padding: 0; }
+                  .custom-header {
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      padding: 1rem 2rem;
+                      display: flex;
+                      align-items: center;
+                      justify-content: space-between;
+                      position: sticky;
+                      top: 0;
+                      z-index: 100;
+                  }
+                  .custom-header h1 {
+                      color: white;
+                      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      font-size: 1.5rem;
+                      margin: 0;
+                  }
+                  .custom-header a {
+                      color: rgba(255,255,255,0.9);
+                      text-decoration: none;
+                      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      font-size: 0.9rem;
+                      padding: 0.5rem 1rem;
+                      border: 1px solid rgba(255,255,255,0.5);
+                      border-radius: 4px;
+                      transition: all 0.2s;
+                  }
+                  .custom-header a:hover {
+                      background: rgba(255,255,255,0.1);
+                      border-color: white;
+                  }
+                  redoc { display: block; }
+              </style>
+          </head>
+          <body>
+              <div class="custom-header">
+                  <h1>📦 Product Listing API</h1>
+                  <a href="index.html">← Back to Docs Home</a>
+              </div>
+              <redoc spec-url="openapi.yaml" 
+                     hide-download-button="false"
+                     theme='{
+                         "colors": { "primary": { "main": "#667eea" } },
+                         "typography": {
+                             "fontFamily": "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+                             "headings": { "fontFamily": "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" }
+                         },
+                         "sidebar": { "backgroundColor": "#fafafa" }
+                     }'>
+              </redoc>
+              <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+          </body>
+          </html>
+          EOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './docs'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

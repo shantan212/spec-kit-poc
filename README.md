@@ -50,6 +50,14 @@ spec-kit-poc/
     └── workflows/              # SpecKit workflow definitions
 ```
 
+## API Documentation
+
+📖 **Live Documentation** (after GitHub Pages deployment):
+- **Swagger UI** (Interactive): `https://<username>.github.io/<repo>/swagger.html`
+- **ReDoc** (Professional): `https://<username>.github.io/<repo>/redoc.html`
+
+To view locally, open `docs/index.html` in your browser.
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
